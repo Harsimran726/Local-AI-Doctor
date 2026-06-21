@@ -27,4 +27,7 @@ class ResearchDoctorAgent:
         except TimeoutError as e:
             print(f"Request timed out: {e}")
             return None
+
         
+
+system_prompt = ''' ''' 

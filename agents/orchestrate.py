@@ -6,6 +6,7 @@ from agents.research_agent import ResearchDoctorAgent
 from agents.surgery_agent import SurgeryDoctorAgent
 import os 
 from dotenv import load_dotenv
+from agents.states import AgentState
 load_dotenv()
 import json 
 from pydantic import error_wrappers
@@ -52,6 +53,7 @@ class OrchestrateAgent:
     def reserch_node(self,x):
         try:
             response = self.reserach_agent.invoke(x)
+            
             return response 
         except Exception as e:
             return None
@@ -109,4 +111,4 @@ class OrchestrateAgent:
         except Exception as e:
             print(f"ERROS {e}")
             return {'status':300,"message":f"ERROR {e}"}
-        
+
