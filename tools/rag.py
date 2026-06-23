@@ -3,7 +3,8 @@ from http import client
 
 from pypdf import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter , SentenceTransformersTokenTextSplitter
-import chromadb 
+import chromadb
+from pathlib import Path
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 import umap 
 from tqdm import tqdm
@@ -12,7 +13,7 @@ import numpy as np
 from dotenv import load_dotenv
 load_dotenv()
 from sentence_transformers import CrossEncoder
-
+from langgraph
 import os
 
 
@@ -120,7 +121,7 @@ class RAG:
                 return None
             
             print(f"CREATING COLLECTION")
-            collection = client.create_collection(name="Local_Doctor_Disease",embedding_function=self.embedding())
+            collection = client.create_collection(name="Local_Doctor_Laws",embedding_function=self.embedding()) # Local_Doctor_Disease
             ids = [str(i) for i in range(len(rec_text))]
             batch_size = 5461
             for i in tqdm(range(0, len(rec_text), batch_size)):
@@ -137,52 +138,169 @@ class RAG:
             return None
     
 
+
+
         
 
+class AskQuery:
+    def __init__(self):
+        pass 
+
+    def disease_collection(self,x):
+        try:
+            rag = RAG()
+            client = rag.chromadb_client().get_collection(name="Local_Doctor_Disease")
+            expended_query = rag.set_llm(x)
+            if expended_query is None:
+                print("Failed to expand the query using LLM.")
+                expended_query = x  # Fallback to the original query if LLM fails 
+            results = client.query(
+                query_texts=[expended_query],
+                n_results=20,
+                include=['documents', 'distances', 'metadatas', 'embeddings']
+            )
+
+            # now passe to the cross encoder for reranking 
+
+            scores = rag.cross_encoder(results['documents'], expended_query)
+
+            if scores is not None:
+                # filter the only positive scores that contain more than threshold  value 
+                threashold = 0.7 # that should be like 70 out of 100 
+                top_docs = [doc for doc, score in zip(results['documents'], scores) if score > threashold]
+                if not top_docs:
+                    print("No documents found with a score above the threshold.")
+                    return None  # Fallback to top 5 documents if no scores are above the threshold
+                print(f"TOP DOCS AFTER CROSS ENCODER RERANKING:- {top_docs}") 
+                return top_docs 
+            else :
+                return None
+
+        except Exception as e:
+            return None
+
+    def laws_collection(self,x):
+        try:
+            rag = RAG()
+            client = rag.chromadb_client().get_collection(name="Local_Doctor_Laws")
+            expended_query = rag.set_llm(x)
+            if expended_query is None:
+                print("Failed to expand the query using LLM.")
+                expended_query = x  # Fallback to the original query if LLM fails 
+            results = client.query(
+                query_texts=[expended_query],
+                n_results=20,
+                include=['documents', 'distances', 'metadatas', 'embeddings']
+            )
+
+            # now passe to the cross encoder for reranking 
+
+            scores = rag.cross_encoder(results['documents'], expended_query)
+
+            if scores is not None:
+                # filter the only positive scores that contain more than threshold  value 
+                threashold = 0.7 # that should be like 70 out of 100 
+                top_docs = [doc for doc, score in zip(results['documents'], scores) if score > threashold]
+                if not top_docs:
+                    print("No documents found with a score above the threshold.")
+                    return None  # Fallback to top 5 documents if no scores are above the threshold
+                print(f"TOP DOCS AFTER CROSS ENCODER RERANKING:- {top_docs}") 
+                return top_docs 
+            else :
+                return None
+
+        except Exception as e:
+            return None
+        
+    def medicine_collection(self,x):
+        try:
+            rag = RAG()
+            client = rag.chromadb_client().get_collection(name="Local_Doctor_Medicine")
+            expended_query = rag.set_llm(x)
+            if expended_query is None:
+                print("Failed to expand the query using LLM.")
+                expended_query = x  # Fallback to the original query if LLM fails 
+            results = client.query(
+                query_texts=[expended_query],
+                n_results=20,
+                include=['documents', 'distances', 'metadatas', 'embeddings']
+            )
+
+            # now passe to the cross encoder for reranking 
+
+            scores = rag.cross_encoder(results['documents'], expended_query)
+
+            if scores is not None:
+                # filter the only positive scores that contain more than threshold  value 
+                threashold = 0.7 # that should be like 70 out of 100 
+                top_docs = [doc for doc, score in zip(results['documents'], scores) if score > threashold]
+                if not top_docs:
+                    print("No documents found with a score above the threshold.")
+                    return None  # Fallback to top 5 documents if no scores are above the threshold
+                print(f"TOP DOCS AFTER CROSS ENCODER RERANKING:- {top_docs}") 
+                return top_docs 
+            else :
+                return None
+
+        except Exception as e:
+            return None
 
 
-# print(chromadb_collection(rec_text))
 
 def ask_query():
     try:
         rag = RAG()
-        # rec_text = rag.extract_text_from_pdf(["C:\Data\Projects\Local Doctor\material\Disease\Ontology Diff Summary.pdf","C:\Data\Projects\Local Doctor\material\Disease\ICD 11 WHO.pdf"])
-        # collection =  rag.chromadb_collection(rec_text)
-        collection = rag.chromadb_client().get_collection(name="Local_Doctor_Disease")
-        print(f"COLLECTION RETRIEVED:- {collection} :- COllection COUNT {collection.count()}")
-        query = " Autosomal recessive chorioretinopathy-microcephaly syndrome "
-        query_expended = rag.set_llm(query)
-        # print(f"QUERY EXPENDED:- {query_expended}")
 
-        # print(f"QUERYING THE COLLECTION")
-        results = collection.query(
-            query_texts=[query_expended],
-            n_results=10,
-            include=['documents', 'distances', 'metadatas', 'embeddings'] 
-        )
+        # Define the path to your folder
+        folder_path = Path("C:\Data\Projects\Local Doctor\material\Laws")
 
-        top_docs = rag.cross_encoder(results['documents'], query_expended)
+        # Use .glob() to find all PDF files and extract their names
+        pdf_names = [file.name for file in folder_path.glob("*.pdf")]
 
-        # print(f"EMBEDDING THE COLLECTION:- {results}")
-        embeddings = collection.get(include=['embeddings'])['embeddings']
-        umap_transform = umap.UMAP(random_state=42,transform_seed=0).fit(embeddings)
-        try:
-            embedding_function = SentenceTransformerEmbeddingFunction()
-            # embedding_function = rag.embedding()
-            query_embedding = embedding_function(query)[0]
-            query_expended_embedding = embedding_function(query_expended)[0]
-            # print(f"QUERY EMBEDDING:- {query_embedding}")
+        # print(f"Total PDFs found: {(pdf_names)}\n")
+
+        # Print each file name
+        # for name in pdf_names:
+        #     print(name)
+
+        rec_text = rag.extract_text_from_pdf(pdf_names)
+        collection =  rag.chromadb_collection(rec_text)
+
+        # collection = rag.chromadb_client().get_collection(name="Local_Doctor_Disease")
+        # print(f"COLLECTION RETRIEVED:- {collection} :- COllection COUNT {collection.count()}")
+        # query = " Autosomal recessive chorioretinopathy-microcephaly syndrome "
+        # query_expended = rag.set_llm(query)
+        # # print(f"QUERY EXPENDED:- {query_expended}")
+
+        # # print(f"QUERYING THE COLLECTION")
+        # results = collection.query(
+        #     query_texts=[query_expended],
+        #     n_results=10,
+        #     include=['documents', 'distances', 'metadatas', 'embeddings'] 
+        # )
+
+        # top_docs = rag.cross_encoder(results['documents'], query_expended)
+
+        # # print(f"EMBEDDING THE COLLECTION:- {results}")
+        # embeddings = collection.get(include=['embeddings'])['embeddings']
+        # umap_transform = umap.UMAP(random_state=42,transform_seed=0).fit(embeddings)
+        # try:
+        #     embedding_function = SentenceTransformerEmbeddingFunction()
+        #     # embedding_function = rag.embedding()
+        #     query_embedding = embedding_function(query)[0]
+        #     query_expended_embedding = embedding_function(query_expended)[0]
+        #     # print(f"QUERY EMBEDDING:- {query_embedding}")
             
-        except Exception as e:
-            print(f"Error in embedding the query: {e}")
-            query_embedding = None  
-        try:
-            retrival_embedding = results['embeddings'][0]
-            print(f"RETrieval EMBEDDING:- {retrival_embedding}")
-        except Exception as e:
-            print(f"Error in retrieving the embedding: {e}")
-            retrival_embedding = None
-        return embeddings, umap_transform , query_embedding, retrival_embedding, query_expended_embedding
+        # except Exception as e:
+        #     print(f"Error in embedding the query: {e}")
+        #     query_embedding = None  
+        # try:
+        #     retrival_embedding = results['embeddings'][0]
+        #     print(f"RETrieval EMBEDDING:- {retrival_embedding}")
+        # except Exception as e:
+        #     print(f"Error in retrieving the embedding: {e}")
+        #     retrival_embedding = None
+        # return embeddings, umap_transform , query_embedding, retrival_embedding, query_expended_embedding
     except Exception as e:
         print(f"Error in ask_query: {e}")
         return None, None , None, None
