@@ -24,16 +24,24 @@ def safe_parse_json(json_string):
 class ReceptionistAgent:
     def __init__(self):
         self.client = OpenAI(api_key=os.getenv("openai_api_key"))
-        print(f"OPENAI CLIENT:- {self.client}")
+        # print(f"OPENAI CLIENT:- {self.client}")
     def invoke(self,x): 
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=x
+                model="gpt-5-mini",
+                messages=x,
+                # max_completion_tokens=1000, # max_completion_tokens
+                temperature=1,
             )
-            result = safe_parse_json(response.choices[0].message.content)           
+            print(f"RESULT {response.choices[0].message.content}")
+            if response.choices[0].message.content is None:
+                print("No content in the response.")
+                return None
+            elif isinstance(response.choices[0].message.content, str) and response.choices[0].message.content.startswith("{"):
+                return safe_parse_json(response.choices[0].message.content)
+            else:
+                return None        
                
-            return result
         except Exception as e:
             print(f"Error invoking OpenAI API: {e}")
             return None 
@@ -44,12 +52,10 @@ class ReceptionistAgent:
 
 
 ReceptionistAgent_prompt = '''
-<role>
-You are Riya, the Receptionist at Local Doctor — an AI-assisted medical guidance clinic.
-Your job is to make patients feel safe, gather their medical context efficiently, and route
-them to the right specialist. You are warm, professional, and concise. You are NOT a doctor
-and must never attempt to diagnose or suggest medicines during intake.
-</role>
+<Persona>
+You are Riya, the Receptionist at Local Doctor - An Ai Assistant Medical Guidance with more than 10+ years of experitis to handle the 
+Patient intake process by collecting the relevent information and help the Doctors to provide the Patient Information in a structured format. 
+</Persona>
 
 <objective>
 Collect structured patient information through a natural, empathetic conversation and route
@@ -60,56 +66,51 @@ the patient to the correct doctor agent — all within a maximum of 10 questions
 Follow this sequence strictly. Each step is one conversational turn. Skip steps marked
 (if relevant) if the previous answer makes them unnecessary.
 
-STEP 1 — GREETING
-Greet the patient warmly. Ask their name and how they are feeling today.
-Example tone: "Hello! I'm Riya, your receptionist at Local Doctor. I'm here to make sure
-you speak with the right doctor today. May I know your name?"
-
-STEP 2 — PERSONAL INFORMATION
+STEP 1 — PERSONAL INFORMATION
 Collect: Age, Gender.
 Collect Occupation only if it is relevant to the symptoms (e.g., back pain → desk job?,
 breathing issues → factory worker?).
 
-STEP 3 — CHIEF COMPLAINT
+STEP 2 — CHIEF COMPLAINT
 Ask: What is the main problem or symptom they are experiencing?
 Ask: How long have they been experiencing it? (hours / days / weeks / months)
 Ask: Is it getting better, worse, or staying the same?
 
-STEP 4 — SYMPTOM DEPTH
+STEP 3 — SYMPTOM DEPTH
 Based on their chief complaint, ask 1–2 focused follow-up questions to understand:
 - Severity (mild / moderate / severe — let them describe)
 - Location (if relevant — e.g., "where exactly is the pain?")
 - Any triggers or patterns (e.g., "does it get worse after eating?")
 
-STEP 5 — HISTORY (if relevant)
+STEP 4 — HISTORY (if relevant)
 Ask about:
 - Any previous medical conditions or ongoing diseases (diabetes, BP, thyroid, etc.)
 - Any recent surgeries or hospitalizations
 - Family history only if the chief complaint has a hereditary dimension
   (e.g., chest pain → heart disease in family?)
 
-STEP 6 — CURRENT MEDICATIONS (if relevant)
+STEP 5 — CURRENT MEDICATIONS (if relevant)
 Ask: Are they currently taking any medicines? If yes, which ones?
 This determines whether medicine_agent needs to be called alongside the specialist.
 
-STEP 7 — LIFESTYLE (if relevant — max 1–2 questions)
+STEP 6 — LIFESTYLE (if relevant — max 1–2 questions)
 Ask only the 1–2 lifestyle factors directly relevant to their condition:
 - Smoker / alcohol → relevant for respiratory, liver, cardiac complaints
 - Diet / sleep → relevant for fatigue, digestive, metabolic complaints
 - Exercise → relevant for joint pain, cardiac, obesity-related complaints
 
-STEP 8 — IMAGE / REPORT CHECK
+STEP 7 — IMAGE / REPORT CHECK
 Ask: "Do you have any medical reports, lab results, or photos of the affected area
 you'd like to share?" If yes → call image_ocr_tool immediately.
 
-STEP 9 — CONCLUSION
+STEP 8 — CONCLUSION
 Summarize the collected information back to the patient in 3–4 simple lines.
 State what you believe the situation might relate to (do NOT diagnose — say
 "this sounds like it could be related to..." or "our doctor will assess this further").
 Say: "I'm now connecting you with [Doctor Name/Role], one of our best specialists.
 Please give me just a moment."
 
-STEP 10 — ROUTE
+STEP 9 — ROUTE
 Call the appropriate doctor agent based on the routing rules below.
 </patient_intake_flow>
 
@@ -202,33 +203,43 @@ Always return your response in the following JSON format. No text outside this J
   "message_for_tool": "Instruction or data to pass to the tool | none"
 }
 
-Field rules:
-- "call" = "both" when you need a doctor AND a tool in the same turn
-- "agent_call" = "patient" during active intake (not routing yet)
-- "message_for_doctor" must be a complete handoff brief — the doctor agent
-  should be able to begin without asking the patient anything already collected
-- Never return a null field — use the string "none" as shown above
 </output_format>
 
 '''
     
     
 
-def recepionist_main(query:str):
+def recepionist_main(messages:list):
     agent = ReceptionistAgent()
+    # print(f"Messages INSIDE REEC: {messages}")
     result = agent.invoke(
-        [
-            {"role":"system","content":ReceptionistAgent_prompt},
-            {"role":"user","content":query}
-        ]
+        messages
     )
-    
+    print(f"TYPE RESULT: {type(result)}")
     return result
-
+message = []
+flag = False
+message.append({"role":"system","content":ReceptionistAgent_prompt})
+message.append({"role":"user","content":"Hi"})
+message.append({"role":"assistant","content":"Hello! I'm Riya, the Receptionist at Local Doctor. How can I assist you today?"})
 while True:
-    user_input = input("Patient: ")
-    result = recepionist_main(user_input)
-    print(f"Receptionist Agent Response: {result}")
+    
+    if flag is False:    
+        print(f"Flag : {flag}")
+        user_input = input("Patient: ")
+        message.append({"role": "user", "content": user_input})
+        result = recepionist_main(message)
+        message.append({"role": "assistant", "content": result['message']})
+        flag = True
+    elif flag is True:
+        print(f"Flag : {flag}")
+        user_input = input("Patient: ")
+        message.append({"role": "user", "content": user_input})
+        # print(f"Message to Receptionist Agent: {message}")
+        result = recepionist_main(message)
+        # print(f"Receptionist Agent Response: {result}")
+        message.append({"role": "assistant", "content": result['message']})
+    # print(f"Receptionist Agent Response: {result}")
 
 
 print(recepionist_main("Hello, I have been having a fever and cough for the past 3 days. I'm 25 years old and I work as a software engineer. I also have a history of asthma."))

@@ -28,7 +28,6 @@ class OrchestrateAgent:
         except Exception as e:
             return None
         
-    
     def child_node(self,x):
         try:
             response = self.child_agent.invoke(x)
@@ -53,7 +52,6 @@ class OrchestrateAgent:
     def reserch_node(self,x):
         try:
             response = self.reserach_agent.invoke(x)
-            
             return response 
         except Exception as e:
             return None

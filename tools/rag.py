@@ -13,7 +13,7 @@ import numpy as np
 from dotenv import load_dotenv
 load_dotenv()
 from sentence_transformers import CrossEncoder
-from langgraph
+from langgraph.types import RetryPolicy
 import os
 
 
@@ -55,21 +55,26 @@ class RAG:
             print(f"Extracting text from PDF: {pdf_path}")
             for i in range(len(pdf_path)):
                 print(f"READING PDF")
-                reader = PdfReader(pdf_path[i])
-                pdf_text = [p.extract_text().strip() for p in reader.pages]
-            
-                # filter the empty texts 
-                print(f"PROCESSING")
-                pdf_text = [text for text in pdf_text if text]
-                charactersplitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0, separators=["\n\n", "\n", " ", ""])
-                charactersplitter_text = charactersplitter.split_text('\n\n'.join(pdf_text))
+                try:
+                    reader = PdfReader(pdf_path[i])
+                    # print(f"READING PAGE {i} {reader}")
+                    pdf_text = [p.extract_text().strip() for p in reader.pages]
+                    # print(f"PDF TEXT:- \n {pdf_text}")
+                    # filter the empty texts 
+                    print(f"PROCESSING")
+                    pdf_text = [text for text in pdf_text if text]
+                    charactersplitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0, separators=["\n\n", "\n", " ", ""])
+                    charactersplitter_text = charactersplitter.split_text('\n\n'.join(pdf_text))
 
-                token_splitter = SentenceTransformersTokenTextSplitter(model_name="all-MiniLM-L6-v2", tokens_per_chunk=256, chunk_overlap=0)
-                
-                token_split_text = []
-                for text in tqdm(charactersplitter_text):
-                    token_split_text.extend(token_splitter.split_text(text)
-                                            )
+                    token_splitter = SentenceTransformersTokenTextSplitter(model_name="all-MiniLM-L6-v2", tokens_per_chunk=256, chunk_overlap=0)
+                    
+                    token_split_text = []
+                    for text in tqdm(charactersplitter_text):
+                        token_split_text.extend(token_splitter.split_text(text)
+                                                )
+                except Exception as e:
+                    print(f"Error reading PDF {pdf_path[i]}: {e}")
+                    continue
                 # rec_text =textsplitter.split_text(pdf_text)
             print(f"EXTRACTION COMPLETE")
             print(f"Number of chunks created: {len(token_split_text)}")
@@ -121,7 +126,9 @@ class RAG:
                 return None
             
             print(f"CREATING COLLECTION")
-            collection = client.create_collection(name="Local_Doctor_Laws",embedding_function=self.embedding()) # Local_Doctor_Disease
+            collection = client.create_collection(name="Local_Doctor_Medicine",embedding_function=self.embedding()) # Local_Doctor_Disease
+            print(f"COLLECTION CREATED:- {collection}")
+            print(f"REC TEXT :- \n {rec_text}")
             ids = [str(i) for i in range(len(rec_text))]
             batch_size = 5461
             for i in tqdm(range(0, len(rec_text), batch_size)):
@@ -144,13 +151,14 @@ class RAG:
 
 class AskQuery:
     def __init__(self):
-        pass 
+        self.client = RAG().chromadb_client()
+        self.rag = RAG()
 
     def disease_collection(self,x):
         try:
-            rag = RAG()
-            client = rag.chromadb_client().get_collection(name="Local_Doctor_Disease")
-            expended_query = rag.set_llm(x)
+        
+            client = self.client.chromadb_client().get_collection(name="Local_Doctor_Disease")
+            expended_query = self.rag.set_llm(x)
             if expended_query is None:
                 print("Failed to expand the query using LLM.")
                 expended_query = x  # Fallback to the original query if LLM fails 
@@ -162,7 +170,7 @@ class AskQuery:
 
             # now passe to the cross encoder for reranking 
 
-            scores = rag.cross_encoder(results['documents'], expended_query)
+            scores = self.rag.cross_encoder(results['documents'], expended_query)
 
             if scores is not None:
                 # filter the only positive scores that contain more than threshold  value 
@@ -181,9 +189,8 @@ class AskQuery:
 
     def laws_collection(self,x):
         try:
-            rag = RAG()
-            client = rag.chromadb_client().get_collection(name="Local_Doctor_Laws")
-            expended_query = rag.set_llm(x)
+            client = self.client.chromadb_client().get_collection(name="Local_Doctor_Laws")
+            expended_query = self.rag.set_llm(x)
             if expended_query is None:
                 print("Failed to expand the query using LLM.")
                 expended_query = x  # Fallback to the original query if LLM fails 
@@ -195,7 +202,7 @@ class AskQuery:
 
             # now passe to the cross encoder for reranking 
 
-            scores = rag.cross_encoder(results['documents'], expended_query)
+            scores = self.rag.cross_encoder(results['documents'], expended_query)
 
             if scores is not None:
                 # filter the only positive scores that contain more than threshold  value 
@@ -214,9 +221,8 @@ class AskQuery:
         
     def medicine_collection(self,x):
         try:
-            rag = RAG()
-            client = rag.chromadb_client().get_collection(name="Local_Doctor_Medicine")
-            expended_query = rag.set_llm(x)
+            client = self.client.chromadb_client().get_collection(name="Local_Doctor_Medicine")
+            expended_query = self.rag.set_llm(x)
             if expended_query is None:
                 print("Failed to expand the query using LLM.")
                 expended_query = x  # Fallback to the original query if LLM fails 
@@ -228,7 +234,7 @@ class AskQuery:
 
             # now passe to the cross encoder for reranking 
 
-            scores = rag.cross_encoder(results['documents'], expended_query)
+            scores = self.rag.cross_encoder(results['documents'], expended_query)
 
             if scores is not None:
                 # filter the only positive scores that contain more than threshold  value 
@@ -247,24 +253,24 @@ class AskQuery:
 
 
 
-def ask_query():
-    try:
-        rag = RAG()
+# def ask_query():
+#     try:
+#         rag = RAG()
 
-        # Define the path to your folder
-        folder_path = Path("C:\Data\Projects\Local Doctor\material\Laws")
+#         # Define the path to your folder
+#         folder_path = Path("C:\Data\Projects\Local Doctor\material\Medicines")
 
-        # Use .glob() to find all PDF files and extract their names
-        pdf_names = [file.name for file in folder_path.glob("*.pdf")]
+#         # Use .glob() to find all PDF files and extract their names
+#         pdf_names = [str(folder_path / file.name) for file in folder_path.glob("*.pdf")]
 
-        # print(f"Total PDFs found: {(pdf_names)}\n")
+#         print(f"Total PDFs found: {(pdf_names)}\n")
 
-        # Print each file name
-        # for name in pdf_names:
-        #     print(name)
+#         # Print each file name
+#         # for name in pdf_names:
+#         #     print(name)
 
-        rec_text = rag.extract_text_from_pdf(pdf_names)
-        collection =  rag.chromadb_collection(rec_text)
+#         rec_text = rag.extract_text_from_pdf(pdf_names)
+#         collection =  rag.chromadb_collection(rec_text)
 
         # collection = rag.chromadb_client().get_collection(name="Local_Doctor_Disease")
         # print(f"COLLECTION RETRIEVED:- {collection} :- COllection COUNT {collection.count()}")
@@ -301,46 +307,46 @@ def ask_query():
         #     print(f"Error in retrieving the embedding: {e}")
         #     retrival_embedding = None
         # return embeddings, umap_transform , query_embedding, retrival_embedding, query_expended_embedding
-    except Exception as e:
-        print(f"Error in ask_query: {e}")
-        return None, None , None, None
+#     except Exception as e:
+#         print(f"Error in ask_query: {e}")
+#         return None, None , None, None
 
-embeddigns , umap_transform , query_embedding, retrival_embedding, query_expended_embedding = ask_query() # , 
-
-
-
-import numpy as np
-def project_embeddigns(embeddings,umap_transform):
-    try:
-        print(f"PROJECTING THE EMBEDDINGS")
-        umap_embeddings = np.empty((len(embeddings), 2))
-        for i,embedding in enumerate(tqdm(embeddings)):
-            umap_embeddings[i] = umap_transform.transform([embedding])
-        return umap_embeddings
-    except Exception as e:
-        print(f"Error in project_embeddigns: {e}")
-
-# embedding projection 
-projected_dataset_embedding = project_embeddigns(embeddigns,umap_transform)
-query_dataset_embedding = project_embeddigns([query_embedding],umap_transform)
-retrival_dataset_embedding = project_embeddigns(retrival_embedding,umap_transform)
-query_expended_dataset_embedding = project_embeddigns([query_expended_embedding],umap_transform)
-import matplotlib.pyplot as plt
-
-# put the plots
-
-plt.figure(figsize=(10, 8))
-plt.scatter(projected_dataset_embedding[:, 0], projected_dataset_embedding[:, 1], s=10)
-plt.scatter(query_dataset_embedding[:, 0], query_dataset_embedding[:, 1], color='red', s=100, marker='X', label='Query Embedding')
-plt.scatter(retrival_dataset_embedding[:, 0], retrival_dataset_embedding[:, 1], color='green', marker='o', s=70, label='Retrieval Embedding')
-plt.scatter(query_expended_dataset_embedding[:, 0], query_expended_dataset_embedding[:, 1], color='blue', marker='X', s=100, label='Query Expended Embedding')
-plt.gca().set_aspect('equal', adjustable='box')
-plt.title('UMAP projection of the dataset embeddings', fontsize=24)
-plt.axis('off')
-plt.show()
-# save the image 
-plt.savefig("umap_projection.png", dpi=300)
+# embeddigns , umap_transform , query_embedding, retrival_embedding, query_expended_embedding = ask_query() # , 
 
 
 
-# i will use the Cross Encoder Model with reranking + llm as a query. 
+# import numpy as np
+# def project_embeddigns(embeddings,umap_transform):
+#     try:
+#         print(f"PROJECTING THE EMBEDDINGS")
+#         umap_embeddings = np.empty((len(embeddings), 2))
+#         for i,embedding in enumerate(tqdm(embeddings)):
+#             umap_embeddings[i] = umap_transform.transform([embedding])
+#         return umap_embeddings
+#     except Exception as e:
+#         print(f"Error in project_embeddigns: {e}")
+
+# # embedding projection 
+# projected_dataset_embedding = project_embeddigns(embeddigns,umap_transform)
+# query_dataset_embedding = project_embeddigns([query_embedding],umap_transform)
+# retrival_dataset_embedding = project_embeddigns(retrival_embedding,umap_transform)
+# query_expended_dataset_embedding = project_embeddigns([query_expended_embedding],umap_transform)
+# import matplotlib.pyplot as plt
+
+# # put the plots
+
+# plt.figure(figsize=(10, 8))
+# plt.scatter(projected_dataset_embedding[:, 0], projected_dataset_embedding[:, 1], s=10)
+# plt.scatter(query_dataset_embedding[:, 0], query_dataset_embedding[:, 1], color='red', s=100, marker='X', label='Query Embedding')
+# plt.scatter(retrival_dataset_embedding[:, 0], retrival_dataset_embedding[:, 1], color='green', marker='o', s=70, label='Retrieval Embedding')
+# plt.scatter(query_expended_dataset_embedding[:, 0], query_expended_dataset_embedding[:, 1], color='blue', marker='X', s=100, label='Query Expended Embedding')
+# plt.gca().set_aspect('equal', adjustable='box')
+# plt.title('UMAP projection of the dataset embeddings', fontsize=24)
+# plt.axis('off')
+# plt.show()
+# # save the image 
+# plt.savefig("umap_projection.png", dpi=300)
+
+
+
+# # i will use the Cross Encoder Model with reranking + llm as a query. 
