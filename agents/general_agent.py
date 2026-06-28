@@ -1,5 +1,5 @@
-from langchain_core import tools
-from langchain_core.memory import ConversationBufferMemory
+# from langchain_core import tools
+# from langchain_core.memory import ConversationBufferMemory
 import os 
 from dotenv import load_dotenv
 load_dotenv()
@@ -17,8 +17,9 @@ class GeneralDoctorAgent:
     def invoke(self,x): 
         try:
             response = self.client.chat.completions.create(
-                model="gpt-5-mini",
-                messages=x
+                model="gpt-5.4-mini",
+                messages=x,
+                reasoning_effort= "medium"
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -100,14 +101,31 @@ image_ocr_tool:
 Return a structured JSON output with the following format:
 {
 "treatment_plan": "Detailed treatment plan for the patient with max 400 words.",
-"reasoning": "Reasoning behind the treatment plan and diagnosis.",
-"message_to_receptionist_agent": "Message to the receptionist agent to pass to the user with max 100 words. | None",
-"message_to_other_agents": "Message to the other agents to get more information with max | None",
-"tool_call": "Instruction or data to pass to the tool | None".
-"agent_call": "Instruction or data to pass to the other agent | None"
+"reasoning": "Reasoning behind the treatment plan and diagnosis.", 
+"message_to_receptionist_agent": "Message to the receptionist agent to pass to the user with max 200 words. | None",
+"message_to_other_agents": "Message to the other agents to get more information with max | None", # meessage to the agents 
+"tool_call": "Instruction or data to pass to the tool | None". # just a tool call not any nested dictionary or json
+"agent_call": "Instruction or data to pass to the other agent | None" # just a agent call not any nested dictionary or json , if two agents that keep them in a list even one agent keep them in a list
 "message_to_tool": "Send a query to the tool to retrive the information from Vector DB | None"
 }
 </Output>
 
 
 '''
+
+def ask_to_general_agent():
+    try:
+        messages = [
+            {"role":"system", "content": system_prompt},
+            {"role":"user", "content": "Patient intake summary (for doctor):\n- Name: not provided\n- Age: 21\n- Gender: Male\n- Chief complaint: Right-sided leg/hip pain\n- Location: Hip (patient believes)\n- Duration: More than 6 months (chronic)\n- Severity: Mild, stable (not worsening)\n- Pattern/relief: Feels more relief with hip hyperextension; sometimes reports a heavy feeling on the right side of the leg\n- Neurologic symptoms: No numbness, tingling, weakness, or swelling reported\n- Past medical history: None reported (no diabetes, HTN, thyroid disease)\n- Prior surgeries/injuries: None reported\n- Current medications/supplements: Magnesium; Vitamin D3 + K2\n- Lifestyle flags: None reported\n- Imaging/reports: None provided\n- OCR findings: none\nConversation log (patient messages):\n1) User: \"Hi\"\n2) Assistant: Greeted and asked how to assist\n3) User: \"i have a pain in leg right side\"\n4) Assistant: Asked age/gender\n5) User: \"21 year old man\"\n6) Assistant: Asked duration\n7) User: \"it more than 6 months\"\n8) Assistant: Asked if better/worse/stable\n9) User: \"it's staying the same mild , when i do the hyperextension than i get more relief\"\n10) Assistant: Asked exact location and neuro symptoms\n11) User: \"i'ts in hip i believe ,  i feel sometime heavy in right side of lef\"\n12) Assistant: Asked past medical conditions/prior injury\n13) User: \"no i don't have\"\n14) Assistant: Asked current medicines\n15) User: \"i'm only taking magnesium , vitamin d3 k2\"\nReason for routing: Adult with chronic localized hip pain without red flags — best routed to General Physician for musculoskeletal assessment; Medicine specialist included because patient provided current supplements/medication list for review.\nPlease review and advise next steps (exam, imaging needs, or medication review)"}
+        ]
+        # print(f"AGENT STSATE MESSAGE: {AgentState.agent_message}")
+        general_agent = GeneralDoctorAgent()
+        result = general_agent.invoke(messages)
+        print(f"GENERAL AGENT RESULT: {result}")
+        return result
+    except Exception as e:
+        print(f"Error in ask_to_general_agent: {e}")
+        return None
+  
+ask_to_general_agent()

@@ -14,7 +14,7 @@ from pydantic import error_wrappers
 from child_agent import ChildDoctorAgent
 from surgery_agent import SurgeryDoctorAgent
 from medicine_agent import MedicineDoctorAgent
-from general_agent import GeneralDoctorAgent
+from general_agent import GeneralDoctorAgent , ask_to_general_agent
 from research_agent import ResearchDoctorAgent
 
 # safe parse json function 
@@ -33,7 +33,7 @@ class ReceptionistAgent:
     def invoke(self,x): 
         try:
             response = self.client.chat.completions.create(
-                model="gpt-5-nano",
+                model="gpt-5-mini",
                 messages=x,
                 # max_completion_tokens=1000, # max_completion_tokens
                 temperature=1,
@@ -58,34 +58,37 @@ class ReceptionistAgent:
 
 ReceptionistAgent_prompt = '''
 <Persona>
-You are Riya, the Receptionist at Local Doctor - An Ai Assistant Medical Guidance with more than 10+ years of experitis to handle the 
+You are Riya, the Receptionist at Local Doctor - An Ai Assistant Medical Guidance with more than 10+ years of expertise to handle the 
 Patient intake process by collecting the relevent information and help the Doctors to provide the Patient Information in a structured format. 
 </Persona>
 
-<objective>
-Collect structured patient information through a natural, empathetic conversation and route
-the patient to the correct doctor agent — all within a maximum of 10 questions.
-</objective>
+<context>
+You are working in a LOCAL DOCTOR agentic system, who have a specilized team of Doctors Agent, where you provide the patient information to the right doctor agent. 
+You have the access of the tools and even you call the doctor agents.
+</Context>
 
 <patient_intake_flow>
 Follow this sequence strictly. Each step is one conversational turn. Skip steps marked
 (if relevant) if the previous answer makes them unnecessary.
 
-STEP 1 — PERSONAL INFORMATION
+STEP 1 — PERSONAL INFORMATION 
 Collect: Age, Gender.
 Collect Occupation only if it is relevant to the symptoms (e.g., back pain → desk job?,
 breathing issues → factory worker?).
+Ask by greeting the patient and asking for their age and gender.
 
 STEP 2 — CHIEF COMPLAINT
 Ask: What is the main problem or symptom they are experiencing?
 Ask: How long have they been experiencing it? (hours / days / weeks / months)
 Ask: Is it getting better, worse, or staying the same?
+- Ask that one by one and keep the conversation short and clear. Do not ask all at once.
 
 STEP 3 — SYMPTOM DEPTH
 Based on their chief complaint, ask 1–2 focused follow-up questions to understand:
 - Severity (mild / moderate / severe — let them describe)
 - Location (if relevant — e.g., "where exactly is the pain?")
 - Any triggers or patterns (e.g., "does it get worse after eating?")
+If you find that are important than go to depth.
 
 STEP 4 — HISTORY (if relevant)
 Ask about:
@@ -94,17 +97,17 @@ Ask about:
 - Family history only if the chief complaint has a hereditary dimension
   (e.g., chest pain → heart disease in family?)
 
-STEP 5 — CURRENT MEDICATIONS (if relevant)
-Ask: Are they currently taking any medicines? If yes, which ones?
+STEP 5 — CURRENT MEDICATIONS (if relevant) ()
+Ask: Are they currently taking any medicines? If yes, which ones? 
 This determines whether medicine_agent needs to be called alongside the specialist.
 
-STEP 6 — LIFESTYLE (if relevant — max 1–2 questions)
+STEP 6 — LIFESTYLE (if relevant — max 1 questions) ( if you think it is relevant to the patient's condition)
 Ask only the 1–2 lifestyle factors directly relevant to their condition:
 - Smoker / alcohol → relevant for respiratory, liver, cardiac complaints
 - Diet / sleep → relevant for fatigue, digestive, metabolic complaints
 - Exercise → relevant for joint pain, cardiac, obesity-related complaints
 
-STEP 7 — IMAGE / REPORT CHECK
+STEP 7 — IMAGE / REPORT CHECK (Only ask for major cases or if the patient volunteers)
 Ask: "Do you have any medical reports, lab results, or photos of the affected area
 you'd like to share?" If yes → call image_ocr_tool immediately.
 
@@ -116,7 +119,7 @@ Say: "I'm now connecting you with [Doctor Name/Role], one of our best specialist
 Please give me just a moment."
 
 STEP 9 — ROUTE
-Call the appropriate doctor agent based on the routing rules below.
+Call the appropriate doctor agent based on the routing rules below. (Don't tell the patient about why i'm asking these questions, i'm routing to you .... like that)
 </patient_intake_flow>
 
 <routing_rules>
@@ -167,24 +170,27 @@ patient_info_tool:
   - Call this ONCE after STEP 8 (before conclusion) when all information is collected.
   - Send a clean structured JSON summary of everything collected.
   - Do not call this after every question.
-
-image_ocr_tool:
-  - Call this immediately when a patient says they have a report, photo, or image to share.
-  - Do not wait until the conclusion.
-  - You may call this mid-conversation (after STEP 8 question) and then continue intake.
 </tool_usage_rules>
 
 <accuracy_rules>
 - Never suggest a diagnosis — use phrases like "this may be related to", "could be a sign of"
 - Never suggest any medicine by name during intake
-- Never ask more than 10 questions total across the entire conversation
-- If a patient volunteers information early, do not ask for it again
+- Never ask more than 7 questions total across the entire conversation
 - If a patient is distressed or in pain, shorten the intake — prioritize routing quickly
 - Always respond in the same language the patient is using
 - Keep each message short — 3–5 lines maximum per turn
 - Before selecting an agent, internally reason through: age → chief complaint → 
   history → current meds → routing rules (in that order)
+- Don't try to ask same question if the patient have don't answer of it or already answered it in previous message.
 </accuracy_rules>
+
+<Strict Instructions>
+- Never response without the JSON Structure format. Always provide a reason for your output.
+- You are intelligent smart, you predict early and try to wrap up fast the conversation with the patient and route to the correct agent.
+- Never call the agent or tool until unless you collect the all information from the patient.
+- In the end always share the all conversation in detail with the doctor agent. 
+Remember the previous conversation with the patient is important for the doctor to understand the patient better.
+</Strict Instructions>
 
 <thinking_instruction>
 Before generating your JSON output, think through the following silently:
@@ -234,26 +240,7 @@ while True:
         user_input = input("Patient: ")
         message.append({"role": "user", "content": user_input})
         result = recepionist_main(message)
-        if result['agent_call'] != "none":
-            print(result['message']['agent_call'])
-            if result['agent_call'] == "child_agent":
-                child_agent = ChildDoctorAgent()
-                result = child_agent.invoke(message)
-            elif result['agent_call'] == "surgery_agent":
-                surgery_agent = SurgeryDoctorAgent()
-                result = surgery_agent.invoke(message)
-            elif result['agent_call'] == "medicine_agent":
-                medicine_agent = MedicineDoctorAgent()
-                result = medicine_agent.invoke(message)
-            elif result['agent_call'] == "general_agent":
-                general_agent = GeneralDoctorAgent()
-                result = general_agent.invoke(message)
-            elif result['agent_call'] == "research_agent":
-                research_agent = ResearchDoctorAgent()
-                result = research_agent.invoke(message)
-            elif result['agent_call'] == "patient":
-                print(result['message'])
-
+        
         message.append({"role": "assistant", "content": result['message']})
         flag = True
     elif flag is True:
@@ -263,27 +250,34 @@ while True:
         # print(f"Message to Receptionist Agent: {message}")
         result = recepionist_main(message)
         if result['agent_call'] != "none":
-            print(result['message']['agent_call'])
+            state = AgentState()
+            state.agent_call = result['agent_call']
+            print(result['agent_call'])
             if result['agent_call'] == "child_agent":
                 child_agent = ChildDoctorAgent()
-                result = child_agent.invoke(message)
             elif result['agent_call'] == "surgery_agent":
                 surgery_agent = SurgeryDoctorAgent()
+                AgentState["agent_message"] = result['message']
                 result = surgery_agent.invoke(message)
             elif result['agent_call'] == "medicine_agent":
                 medicine_agent = MedicineDoctorAgent()
+                AgentState["agent_message"] = result['message']
                 result = medicine_agent.invoke(message)
             elif result['agent_call'] == "general_agent":
-                general_agent = GeneralDoctorAgent()
-                result = general_agent.invoke(message)
+                
+                state.agent_message = result['message_for_doctor']
+                AgentState["agent_message"] = result['message_for_doctor']
+                general_agent = ask_to_general_agent(AgentState)
             elif result['agent_call'] == "research_agent":
                 research_agent = ResearchDoctorAgent()
+                AgentState["agent_message"] = result['message']
                 result = research_agent.invoke(message)
             elif result['agent_call'] == "patient":
                 print(result['message'])
 
         # print(f"Receptionist Agent Response: {result}")
         message.append({"role": "assistant", "content": result['message']})
+    print(f"CONVERSATION:- \n {message}")
     # print(f"Receptionist Agent Response: {result}")
 
 
