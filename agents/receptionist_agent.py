@@ -7,10 +7,15 @@ import re
 import json 
 import datetime 
 from openai import OpenAI
+from states import AgentState
 from pydantic import error_wrappers
 # from tools.ocr_tool import ImageOCRTool
 # from tools.pdf_tool import PDFTool
-
+from child_agent import ChildDoctorAgent
+from surgery_agent import SurgeryDoctorAgent
+from medicine_agent import MedicineDoctorAgent
+from general_agent import GeneralDoctorAgent
+from research_agent import ResearchDoctorAgent
 
 # safe parse json function 
 
@@ -28,7 +33,7 @@ class ReceptionistAgent:
     def invoke(self,x): 
         try:
             response = self.client.chat.completions.create(
-                model="gpt-5-mini",
+                model="gpt-5-nano",
                 messages=x,
                 # max_completion_tokens=1000, # max_completion_tokens
                 temperature=1,
@@ -229,6 +234,26 @@ while True:
         user_input = input("Patient: ")
         message.append({"role": "user", "content": user_input})
         result = recepionist_main(message)
+        if result['agent_call'] != "none":
+            print(result['message']['agent_call'])
+            if result['agent_call'] == "child_agent":
+                child_agent = ChildDoctorAgent()
+                result = child_agent.invoke(message)
+            elif result['agent_call'] == "surgery_agent":
+                surgery_agent = SurgeryDoctorAgent()
+                result = surgery_agent.invoke(message)
+            elif result['agent_call'] == "medicine_agent":
+                medicine_agent = MedicineDoctorAgent()
+                result = medicine_agent.invoke(message)
+            elif result['agent_call'] == "general_agent":
+                general_agent = GeneralDoctorAgent()
+                result = general_agent.invoke(message)
+            elif result['agent_call'] == "research_agent":
+                research_agent = ResearchDoctorAgent()
+                result = research_agent.invoke(message)
+            elif result['agent_call'] == "patient":
+                print(result['message'])
+
         message.append({"role": "assistant", "content": result['message']})
         flag = True
     elif flag is True:
@@ -237,6 +262,26 @@ while True:
         message.append({"role": "user", "content": user_input})
         # print(f"Message to Receptionist Agent: {message}")
         result = recepionist_main(message)
+        if result['agent_call'] != "none":
+            print(result['message']['agent_call'])
+            if result['agent_call'] == "child_agent":
+                child_agent = ChildDoctorAgent()
+                result = child_agent.invoke(message)
+            elif result['agent_call'] == "surgery_agent":
+                surgery_agent = SurgeryDoctorAgent()
+                result = surgery_agent.invoke(message)
+            elif result['agent_call'] == "medicine_agent":
+                medicine_agent = MedicineDoctorAgent()
+                result = medicine_agent.invoke(message)
+            elif result['agent_call'] == "general_agent":
+                general_agent = GeneralDoctorAgent()
+                result = general_agent.invoke(message)
+            elif result['agent_call'] == "research_agent":
+                research_agent = ResearchDoctorAgent()
+                result = research_agent.invoke(message)
+            elif result['agent_call'] == "patient":
+                print(result['message'])
+
         # print(f"Receptionist Agent Response: {result}")
         message.append({"role": "assistant", "content": result['message']})
     # print(f"Receptionist Agent Response: {result}")
